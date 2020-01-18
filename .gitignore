@@ -1,0 +1,4 @@
+face_detection_workspace.code-workspace
+logs/
+__pycache__/
+HELEN/
