@@ -106,24 +106,18 @@ class SelfAttnLayer(tf.keras.layers.Layer):
         bypass = self.gamma * o_2D + X
 
         return bypass
-
+        
 
 def HeatmapCNN(input_shape, num_features):
     return tf.keras.Sequential([
-        tf.keras.Input(shape = input_shape),
-        MiniCeptionLayer(2, (3,5,7), (64, 192, 256)),
-        MiniCeptionLayer(2, (3,5,7), (32, 96, 128)),
-        MiniCeptionLayer(1, (3,5,7), (32, 96, 128)),
-        SelfAttnLayer(k=2),
-        ConvBNReluBlock(256,1),
-        SelfAttnLayer(k=2),
-        ConvBNReluBlock(256,1),
-        ConvBNReluBlock(512,1),
+        ConvBNReluBlock(128,7, input_shape = input_shape),
+        ConvBNReluBlock(128,13),
+        ConvBNReluBlock(256, 1),
         layers.Conv2D(num_features, 1),
         FeatureSoftmaxLayer()
     ], name = 'HeatmapCNN')
 
-#don't change
+
 def CascadingHeatmapCNN(num_features, feature_shape, prev_heatmap_shape):
 
     features = tf.keras.Input(shape = feature_shape, name = 'Features')
@@ -148,13 +142,15 @@ def RegressionFeatureCNN(input_shape):
 
 def RegressionPredictionCNN(num_features, input_shape):
     return tf.keras.Sequential([
+        ConvBNReluBlock(256, 3, input_shape = input_shape),
+        layers.MaxPool2D(2),
         ConvBNReluBlock(512, 3),
         layers.MaxPool2D(2),
-        ConvBNReluBlock(1024, 3, input_shape = input_shape),
-        layers.MaxPool2D(2),
-        ConvBNReluBlock(1024, 1),
-        layers.MaxPool2D(2),
-        layers.Conv2D(num_features, 1),
+        ConvBNReluBlock(512, 1),
+        layers.Flatten(),
+        #layers.Conv2D(2*num_features, 1),
+        layers.Dense(2*num_features),
+        layers.Reshape((num_features, 2))
     ], name = 'OutCNN')
 
 def CascadingRegressionCNN(num_features, feature_input_shape, heatmap_shape, prev_regression_feature_shape):
@@ -173,8 +169,51 @@ def CascadingRegressionCNN(num_features, feature_input_shape, heatmap_shape, pre
 
     return tf.keras.Model((features, heatmap, prev_regression), (regression_features, regression_output), name = 'CascadingRCNN')
 
+def RCCNN(num_features, image_shape, num_cascades = 3):
 
-def RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
+    img = tf.keras.Input(shape = image_shape, name = 'Input_image')
+    #define features network (1)
+    features = FeatureCNN(image_shape)(img)
+
+    FEATURE_SHAPE = features.get_shape()[1:]
+
+    #assert(FEATURE_SHAPE[:-1] == prior_shape[:-1]), 'Ouptut of feature network must concatenate with the priors for heatmap prediction network'
+
+    #define recurrent heatmap module (2)
+    #heatmap_rcnn = CascadingHeatmapCNN(num_features, FEATURE_SHAPE, prior_shape)
+
+    heatmap = HeatmapCNN(FEATURE_SHAPE, num_features)(features)
+    
+    HEATMAP_SHAPE = heatmap.get_shape()[1:]
+
+    regression_features_input = layers.Concatenate(axis = -1)([features, heatmap])
+
+    #(3)
+    regression_features = RegressionFeatureCNN(regression_features_input.get_shape()[1:])(regression_features_input)
+
+    REGRESSION_FEATURES_SHAPE = regression_features.get_shape()[1:]
+
+    #outputs so far: F, H1, R1
+    #regression_feature_rccn takes as input: features and new heatmap
+    #contains networks (4) and (5)
+    heatmap_rcnn = CascadingHeatmapCNN(num_features, FEATURE_SHAPE, HEATMAP_SHAPE)
+    regression_prediction_rcnn = CascadingRegressionCNN(num_features, FEATURE_SHAPE, HEATMAP_SHAPE, REGRESSION_FEATURES_SHAPE)
+        
+    heatmaps = []
+    regressions = []
+
+    for _ in range(num_cascades):
+        heatmap = heatmap_rcnn([features, heatmap])
+        regression_features, prediction = regression_prediction_rcnn([features, heatmap, regression_features])
+        heatmaps.append(heatmap)
+        regressions.append(regression_features)
+
+    heatmap_output = tf.stack(heatmaps, axis = 1)
+    regression_output = tf.stack(regressions, axis = 1)
+
+    return tf.keras.Model(img, (heatmap_output, regression_output))
+
+def priors_RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
 
     img = tf.keras.Input(shape = image_shape, name = 'Input_image')
     priors = tf.keras.Input(shape = prior_shape, name = 'Prior')
@@ -204,18 +243,22 @@ def RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
     #contains networks (4) and (5)
     regression_prediction_rcnn = CascadingRegressionCNN(num_features, FEATURE_SHAPE, HEATMAP_SHAPE, REGRESSION_FEATURES_SHAPE)
         
-    recurrent_predictions = []
+    heatmaps = []
+    regressions = []
 
     for _ in range(num_cascades):
         heatmap = heatmap_rcnn([features, heatmap])
         regression_features, prediction = regression_prediction_rcnn([features, heatmap, regression_features])
-        recurrent_predictions.append((heatmap, prediction))
+        heatmaps.append(heatmap)
+        regressions.append(regression_features)
 
-    return tf.keras.Model((img, priors), recurrent_predictions)
+    heatmap_output = tf.stack(heatmaps, axis = 1)
+    regression_output = tf.stack(regressions, axis = 1)
+
+    return tf.keras.Model((img, priors), (heatmap_output, regression_output))
 
 
-
-
+'''
 num_features = 194
 img_shape = (256,256, 3)
 prior_shape = (64,64,num_features)
@@ -223,4 +266,4 @@ prior_shape = (64,64,num_features)
 regression_input = (8,8,512)
 #model = RegressionPredictionCNN(194, regression_input)
 model = RCCNN(num_features, img_shape, prior_shape)
-print(model.summary())
+print(model.summary())'''
