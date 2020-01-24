@@ -1,3 +1,6 @@
+
+#%%
+import numpy as np
 import tensorflow as tf
 import tensorflow.keras.layers as layers
 
@@ -212,6 +215,14 @@ def RCCNN(num_features, image_shape, num_cascades = 3):
     regression_output = tf.stack(regressions, axis = 1)
 
     return tf.keras.Model(img, (heatmap_output, regression_output))
+
+
+net = RCCNN(194, (256,256,3))
+
+batch = np.random.rand(16,256,256,3)
+
+output = net(batch)
+#%%
 
 def priors_RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
 

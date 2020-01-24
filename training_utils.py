@@ -1,8 +1,10 @@
+#%%
 import tensorflow as tf
 import numpy as np
 import cv2
-from data_utils import show_keypoints
-
+from data_utils import show_keypoints, prepare_input, LandmarkImageGenerator
+import os
+#%%
 #sum of crossentropy, normalized over batch dimension
 #sum of crossentropy, normalized over batch dimension
 def heatmap_loss(H_hat, H):
@@ -32,24 +34,19 @@ def RCCNN_loss(prediction, target):
 
 class FLDRegressionCallback(tf.keras.callbacks.Callback):
 
-    def __init__(self, save_dir, image_dir):
+    def __init__(self, save_dir, test_datagen):
         newfilename = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         self.save_dir = os.path.join(save_dir, newfilename)
         if not os.path.exists(self.save_dir):
             os.mkdir(self.save_dir)
         assert(os.path.exists(image_dir))
-        self.image_dir = image_dir
+        self.test_datagen = test_datagen
     
     def on_epoch_end(self, epoch, logs = None):
-        files = os.listdir(self.image_dir)
-        r = np.random.randint(0, len(files))
-        sample = os.path.join(self.image_dir, files[r])
+        
+        img, keypoints = next(iter(self.test_datagen))
 
-        img = cv2.imread(sample).astype('float32')
-
-        unnorm_img = (img / 255.) - 1.
-
-        heatmap, regression = self.model(np.array([norm_img]))
+        heatmap, regression = self.model(np.array([img]))
 
         regression = regression[0][-1]
 
@@ -59,6 +56,18 @@ class FLDRegressionCallback(tf.keras.callbacks.Callback):
 
         img = show_keypoints(unnorm_img, coordinates)
 
-        cv2.imwrite(os.path.join(self.save_dir, 'epoch_{}'.format(str(epoch))), img)
+        cv2.imwrite(os.path.join(self.save_dir, 'epoch_{}.jpg'.format(str(epoch))), img)
 
-        
+#%%
+def FLDR_preprocessed_datagen(image_generator, batch_size = 64):
+
+    dataset = tf.data.Dataset.from_generator(
+        image_generator,
+        (tf.float32, (tf.float32, tf.float32)),
+    )
+
+    dataset.batch(batch_size)
+    dataset.prefetch(4)
+
+    return dataset
+    

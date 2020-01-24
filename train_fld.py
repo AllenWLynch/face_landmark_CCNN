@@ -1,28 +1,29 @@
 
+#%%
 import tensorflow as tf
 import numpy as np
-import data_utils
 import networks
-from training_utils import RCCNN_loss, FLDRegressionCallback
 import datetime
 import os
 import cv2
-
+import importlib
+import training_utils
+import data_utils
+#%%
 #__(1)__________Load Data_______________
-TRAINING_DIR = './HELEN/processed_samples/train/'
-TESTING_DIR = './HELEN/processed_samples/test/'
+TRAIN_DIR = './HELEN/processed_samples/train'
+TEST_DIR = './HELEN/processed_samples/test'
 
-trainX, trainY = data_utils.load_dataset(TRAINING_DIR)
-testX, testY = data_utils.load_dataset(TESTING_DIR)
+size_args = (256, 64, 2.5)
 
-BATCH_SIZE = 64
+training_generator = data_utils.LandmarkImageGenerator(TRAIN_DIR, *size_args)
+testing_generator = data_utils.LandmarkImageGenerator(TEST_DIR, *size_args)
 
-train_dataset = tf.data.Dataset.from_tensor_slices((trainX, trainY))
-train_dataset.shuffle(buffer_size = 400).batch(BATCH_SIZE)
+train_dataset = training_utils.FLDR_preprocessed_datagen(training_generator)
+test_dataset = training_utils.FLDR_preprocessed_datagen(testing_generator)
 
-test_dataset = tf.data.Dataset.from_tensor_slices((testX, testY))
-test_dataset.batch(BATCH_SIZE)
 
+#%%
 #__(2)__________Load Model_______________
 NUM_FEATURES = 194
 IMG_SHAPE = (256,256,3)
@@ -50,14 +51,17 @@ CALLBACKS = [
     tf.keras.callbacks.TensorBoard(
         './logs',
         histogram_freq = 1),
-    FLDRegressionCallback('./examples','./HELEN/processed_samples/test/'),
+    training_utils.FLDRegressionCallback('./examples/', testing_generator)
     tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss', patience = 5, min_lr = 1e-6),
 ]
 
 rccnn.fit(train_dataset, 
         epochs = 100, 
+        steps_per_epoch = 2000,
         validation_data = test_dataset,
-        callbacks = CALLBACKS)
+        validation_steps = 300,
+        callbacks = CALLBACKS,
+        use_multiprocessing = True)
 
 
 

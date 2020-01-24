@@ -1,40 +1,38 @@
 #%%
-import tensorflow as tf
 import numpy as np
 from scipy.stats import multivariate_normal
-import matplotlib.pyplot as plt
 import cv2
 import os
-import re
-from time import sleep
 from scipy import ndimage
-from PIL import Image
 import random
+import matplotlib.pyplot as plt
 
 
 #%%
+class HeatmapTargeter():
 
-#this sets up the Gaussian distribution for the heatmap
-class heatmap_targeter():
-
-    def __init__(self, heatmap_size, std, target_size = 256):
+    def __init__(self, image_size, heatmap_size, std):
         self.heatmap_size = heatmap_size
         self.std = std
-        self.target_size = target_size
+        self.target_size = image_size
         self.distribution = multivariate_normal(cov=[[std**2, 0],[0, std**2]])
 
     def __call__(self, targets):
         targets = targets * self.heatmap_size/self.target_size
         num_points, coors = targets.shape
         assert(coors == 2), 'Array must be of size (num_points, 2)'
-        X_targs, Y_targs = targets[:, 0].reshape(-1,1,1), targets[:,1].reshape(-1,1,1)
+        x_targs, y_targs = targets[:, 0][np.newaxis, :], targets[:,1][np.newaxis,:]
 
-        x_mesh, y_mesh = np.meshgrid(np.arange(self.heatmap_size), np.arange(self.heatmap_size))
-        x_error = np.expand_dims(np.expand_dims(x_mesh, 0) - X_targs, -1)
-        y_error = np.expand_dims(np.expand_dims(y_mesh, 0) - Y_targs, -1)
+        x = np.arange(self.heatmap_size)[:,np.newaxis]
+        x_errors = np.expand_dims((x - x_targs).T, -2) #(194,64, 1)
+        xx = np.tile(x_errors, (self.heatmap_size, 1))
 
-        errors = np.concatenate((x_error, y_error), axis = -1)
+        y = np.arange(self.heatmap_size)[:,np.newaxis]
+        y_errors = np.expand_dims((y - y_targs).T, -1)
+        yy = np.tile(y_errors, self.heatmap_size)
 
+        errors = np.concatenate([np.expand_dims(xx, -1), np.expand_dims(yy, -1)], axis = -1)
+        
         probs = self.distribution.pdf(errors)
 
         per_feature_sums = np.sum(probs, axis = (-2,-1))
@@ -112,26 +110,35 @@ def stochastic_padding(keypoints, height, width, face_area_ratio, xmin, ymin, xm
 
     if xmax - square_sidelength >= xmin:
         square_x = xmin
+    elif xmax - square_sidelength <= 0:
+        square_x = 0
     else:
         square_x = np.random.randint(xmax - square_sidelength, xmin)
 
     if ymax - square_sidelength >= ymin:
-        square_y = ymax - square_sidelength
+        square_y = max(ymax - square_sidelength, 0)
+    elif ymax - square_sidelength <= 0:
+        square_y = 0
     else:
         square_y = np.random.randint(ymax - square_sidelength, ymin)
 
-    keypoints = keypoints - np.array([[square_x, square_y]])
+    keypoints = keypoints - np.array([[float(square_x), float(square_y)]])
 
     return keypoints, (square_x, square_y, square_sidelength)
 
 def rescale_image_keypoints(max_dimension, img, keypoints):
-    pass
+    
+    height, width = img.shape[:2]
 
-def prepare_input(annotation_filename, image_dir):
+    scale = max_dimension / max(height, width)
 
-    FOREHEAD_SCALE = 1.4
-    ROTATION_MAX = 10
-    FACE_FRAME_RATIO = 0.55
+    img = cv2.resize(img, (int(width * scale), int(height * scale)))
+
+    keypoints = keypoints * scale
+
+    return img, keypoints
+
+def get_annotation_and_image(annotation_filename, image_dir):
 
     with open(annotation_filename) as f:
         corresponding_jpg = f.readline().strip()
@@ -145,6 +152,35 @@ def prepare_input(annotation_filename, image_dir):
     assert(os.path.exists(image_path))
 
     img = cv2.imread(image_path)
+
+    return img, keypoints
+
+def load_processed_sample(keypoint_filepath):
+
+    keypoints = np.load(keypoint_filepath)
+
+    dir_chain = os.path.normpath(keypoint_filepath).split(os.sep)
+
+    jpg_name = os.path.basename(keypoint_filepath)[:-4] + '.jpg'
+
+    jpg_path = os.path.join(*dir_chain[:-2], 'images', jpg_name)
+
+    assert(os.path.exists(jpg_path))
+
+    image = cv2.imread(jpg_path)
+
+    return image, keypoints
+
+def prepare_input(annotation_filename, heatmap_targeter, OUTPUT_SIZE = 256, image_dir = None, FOREHEAD_SCALE = 1.4, NORMALIZE = True,
+                ROTATION_MAX = 10, FACE_FRAME_RATIO = 0.55, FROM_PREPROCESSED = True):
+
+    if FROM_PREPROCESSED:
+        img, keypoints = load_processed_sample(annotation_filename)
+    else:
+        assert(not image_dir is None)
+        img, keypoints = get_annotation_and_image(annotation_filename, image_dir)
+
+
     true_height, true_width = img.shape[:2]
 
     img, keypoints = rotate_img(ROTATION_MAX, true_width, true_height, img, keypoints)
@@ -158,37 +194,71 @@ def prepare_input(annotation_filename, image_dir):
     keypoints, (sx, sy, length) = stochastic_padding(keypoints, height, width, FACE_FRAME_RATIO, 
                 xmin, ymin, xmax, ymax, true_width, true_height)
 
-    cropped = img[sy:sy+length, sx:sx+length]
+    img = img[sy:sy+length, sx:sx+length]
 
-    #just augment the cropped images now
+    scale = OUTPUT_SIZE/length
 
-    return cropped, keypoints
+    img = cv2.resize(img, (OUTPUT_SIZE,OUTPUT_SIZE), interpolation = cv2.INTER_NEAREST)
 
-TEST_ANNOTATION = './HELEN/annotation/2.txt'
-IMAGE_DIR = './HELEN/train'
-ANNOTATION_DIR = './HELEN/annotation/'
+    keypoints = keypoints * scale
 
-'''
-image, pts, upper, lower = prepare_input(TEST_ANNOTATION, IMAGE_DIR)
+    #augment brightness, contrast, and other stuff here
 
-with_pts = show_keypoints(image, pts)
-with_pts_and_rect = cv2.rectangle(with_pts, upper, lower, (255,0,0), 2)
+    #normalize to [-0.5, 0.5], [-1,1]
+    if NORMALIZE:
+        normalized_image = ((img / 255.) - 1.).astype(np.float32)
+        normalized_keypoints = ((2. * keypoints / OUTPUT_SIZE) - 1.).astype(np.float32)
+    else:
+        normalized_image = img
+        normalized_keypoints = keypoints
 
-cv2.imshow('mat', with_pts_and_rect)
-cv2.waitKey()'''
-files = os.listdir(ANNOTATION_DIR)
-for i in range(50):
-    try:
-        random_seed = random.randint(0,1000)
-        np.random.seed(136)
-        #r = np.random.randint(0, len(files))
-        #filepath = os.path.join(ANNOTATION_DIR, files[r])
-        img, pts = prepare_input('./HELEN/annotation/768.txt', IMAGE_DIR)
-        withpts = show_keypoints(img, pts)
-        cv2.imshow('hey', withpts)
+    gaussians = heatmap_targeter(keypoints)
+
+    print('gaussina hsape:', gaussians.shape)
+
+    return normalized_image, (gaussians.astype(np.float32), normalized_keypoints)
+
+class LandmarkImageGenerator():
+
+    def __init__(self, preprocessed_datadir, input_image_size, heatmap_size, heatmap_std, **kwargs):
+
+        self.heatmapper = HeatmapTargeter(input_image_size, heatmap_size, heatmap_std)
+
+        keypoints_dir = os.path.join(preprocessed_datadir, 'keypoints')
+        self.files = [os.path.join(keypoints_dir, filename) for filename in os.listdir(keypoints_dir)]
+        self.i = 0
+        self.prepare_input_kwargs = kwargs
+
+
+    def __call__(self):
+
+        while True:
+
+            keypoints_filepath = self.files[self.i]
+
+            yield prepare_input(keypoints_filepath, self.heatmapper, **self.prepare_input_kwargs)
+
+            self.i += 1
+
+            if self.i >= len(self.files):
+                self.i = 0
+
+
+if __name__ == "__main__":
+    #TEST_ANNOTATION = './HELEN/annotation/2.txt'
+    #IMAGE_DIR = './HELEN/processed_samples/images'
+    #ANNOTATION_DIR = './HELEN/processed_samples/keypoints'
+
+    samples_dir ='./HELEN/processed_samples/'
+
+    gen = iter(LandMarkImageGenerator(samples_dir, 256, 64, 2.5, NORMALIZE = False)())
+
+    for i in range(10):
+        
+        image, (keypoints, gaussians) = next(gen)
+
+        cv2.imshow('im', show_keypoints(image, keypoints))
         cv2.waitKey()
-    except Exception as err:
-        print(filepath, random_seed)
-        raise err
+
 
 # %%
