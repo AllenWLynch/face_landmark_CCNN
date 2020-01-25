@@ -11,17 +11,18 @@ import training_utils
 import data_utils
 #%%
 #__(1)__________Load Data_______________
-TRAIN_DIR = './HELEN/processed_samples/train'
+
+'''TRAIN_DIR = './HELEN/processed_samples/train'
 TEST_DIR = './HELEN/processed_samples/test'
 
 size_args = (256, 64, 2.5)
 
-training_generator = data_utils.LandmarkImageGenerator(TRAIN_DIR, *size_args)
-testing_generator = data_utils.LandmarkImageGenerator(TEST_DIR, *size_args)
+training_generator = data_utils.LandmarkImageGenerator(TRAIN_DIR,*size_args, 3)
+testing_generator = data_utils.LandmarkImageGenerator(TEST_DIR, *size_args, 3)
 
-train_dataset = training_utils.FLDR_preprocessed_datagen(training_generator)
-test_dataset = training_utils.FLDR_preprocessed_datagen(testing_generator)
-
+train_dataset = training_utils.FLDR_preprocessed_datagen(training_generator, batch_size=4)
+test_dataset = training_utils.FLDR_preprocessed_datagen(testing_generator, batch_size=4)
+'''
 
 #%%
 #__(2)__________Load Model_______________
@@ -34,7 +35,13 @@ rccnn = networks.RCCNN(NUM_FEATURES, IMG_SHAPE)
 
 optim = tf.keras.optimizers.Adam(1e-5)
 
-rccnn.compile(optimizer = optim, loss = RCCNN_loss, metrics = 'val_loss')
+rccnn.compile(optimizer = optim, 
+            loss = {
+                'heatmap_output' : training_utils.heatmap_loss, 
+                'regression_output' : tf.keras.losses.MeanSquaredError()},
+            metrics = {
+                'regression_output' : [tf.keras.metrics.MeanSquaredError()]
+            })
 
 #__(7)__________Set up callbacks___________
 CHECKPOINT_DIR = './checkpoints'
@@ -49,19 +56,17 @@ CALLBACKS = [
             save_best_only = True,
             mode = 'min'),
     tf.keras.callbacks.TensorBoard(
-        './logs',
+        './logs/',
         histogram_freq = 1),
-    training_utils.FLDRegressionCallback('./examples/', testing_generator)
-    tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss', patience = 5, min_lr = 1e-6),
-]
+    #training_utils.FLDRegressionCallback('./examples/', testing_generator)
+    tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss', patience = 5, min_lr = 1e-6),]
 
 rccnn.fit(train_dataset, 
-        epochs = 100, 
+        epochs = 1, 
         steps_per_epoch = 2000,
         validation_data = test_dataset,
-        validation_steps = 300,
-        callbacks = CALLBACKS,
-        use_multiprocessing = True)
+        validation_steps = 200,
+        callbacks = CALLBACKS)
 
 
 

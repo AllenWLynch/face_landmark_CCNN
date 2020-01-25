@@ -208,20 +208,14 @@ def RCCNN(num_features, image_shape, num_cascades = 3):
     for _ in range(num_cascades):
         heatmap = heatmap_rcnn([features, heatmap])
         regression_features, prediction = regression_prediction_rcnn([features, heatmap, regression_features])
-        heatmaps.append(heatmap)
-        regressions.append(regression_features)
+        heatmaps.append(tf.expand_dims(heatmap, 1))
+        regressions.append(tf.expand_dims(prediction,1))
 
-    heatmap_output = tf.stack(heatmaps, axis = 1)
-    regression_output = tf.stack(regressions, axis = 1)
+    heatmap_output = layers.Concatenate(axis = 1, dtype = 'float32', name = 'heatmap_output')(heatmaps)
+    regression_output = layers.Concatenate(axis = 1, dtype = 'float32', name = 'regression_output')(regressions)
 
     return tf.keras.Model(img, (heatmap_output, regression_output))
 
-
-net = RCCNN(194, (256,256,3))
-
-batch = np.random.rand(16,256,256,3)
-
-output = net(batch)
 #%%
 
 def priors_RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
@@ -269,12 +263,9 @@ def priors_RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
     return tf.keras.Model((img, priors), (heatmap_output, regression_output))
 
 
-'''
-num_features = 194
-img_shape = (256,256, 3)
-prior_shape = (64,64,num_features)
+if __name__ == "__main__":
+    net = RCCNN(194, (256,256,3))
 
-regression_input = (8,8,512)
-#model = RegressionPredictionCNN(194, regression_input)
-model = RCCNN(num_features, img_shape, prior_shape)
-print(model.summary())'''
+    batch = np.random.rand(16,256,256,3)
+
+    output = net(batch)

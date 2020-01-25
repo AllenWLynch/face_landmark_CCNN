@@ -7,30 +7,10 @@ import os
 #%%
 #sum of crossentropy, normalized over batch dimension
 #sum of crossentropy, normalized over batch dimension
-def heatmap_loss(H_hat, H):
-
-    #crossentropy loss, expection over features axis
-    #shapes = H_hat = (m, d, h, w, N), H = (m, h, w, N)
-    (m,d,h,w,N) = H_hat.get_shape()
-    H = tf.expand_dims(H, 1)
-    log_p_hat = tf.math.log(H_hat)
-    cross_entropy = - tf.multiply(H, H_hat)
-    loss = tf.stop_gradient(1/(m*d*N*h*w)) * tf.reduce_sum(cross_entropy)
-    return loss
-
-def regression_loss(R_hat, R):
-    (m, d, k, c) = R_hat.get_shape()
-    R = tf.expand_dims(R, 1)
-    return tf.stop_gradient(1/(m*d*c*k)) * tf.reduce_sum(tf.square(R_hat - R))
-
-
-def RCCNN_loss(prediction, target):
-    
-    H_hat, R_hat = prediction
-    H_real, R_real = target
-
-    return 0.5 * regression_loss(R_hat, R_real) + 0.5 * heatmap_loss(H_hat, H_real)
-
+def heatmap_loss(y_true, y_pred):
+    (_, d, h, w, n) = y_pred.get_shape()
+    log_p_hat = tf.math.log(y_pred)
+    return -1. * tf.reduce_mean(tf.multiply(y_true, log_p_hat))
 
 class FLDRegressionCallback(tf.keras.callbacks.Callback):
 
@@ -64,10 +44,11 @@ def FLDR_preprocessed_datagen(image_generator, batch_size = 64):
     dataset = tf.data.Dataset.from_generator(
         image_generator,
         (tf.float32, (tf.float32, tf.float32)),
+        (tf.TensorShape([256,256,3]), (tf.TensorShape([3,64,64,194]), tf.TensorShape([3,194,2])))
     )
 
-    dataset.batch(batch_size)
-    dataset.prefetch(4)
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.prefetch(4)
 
     return dataset
     

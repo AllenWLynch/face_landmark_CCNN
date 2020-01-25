@@ -171,7 +171,7 @@ def load_processed_sample(keypoint_filepath):
 
     return image, keypoints
 
-def prepare_input(annotation_filename, heatmap_targeter, OUTPUT_SIZE = 256, image_dir = None, FOREHEAD_SCALE = 1.4, NORMALIZE = True,
+def prepare_input(annotation_filename, heatmap_targeter, num_cascades, OUTPUT_SIZE = 256, image_dir = None, FOREHEAD_SCALE = 1.4, NORMALIZE = True,
                 ROTATION_MAX = 10, FACE_FRAME_RATIO = 0.55, FROM_PREPROCESSED = True):
 
     if FROM_PREPROCESSED:
@@ -201,32 +201,29 @@ def prepare_input(annotation_filename, heatmap_targeter, OUTPUT_SIZE = 256, imag
     img = cv2.resize(img, (OUTPUT_SIZE,OUTPUT_SIZE), interpolation = cv2.INTER_NEAREST)
 
     keypoints = keypoints * scale
+    
+    gaussians = np.random.rand(64,64,194).astype('float32')
 
-    #augment brightness, contrast, and other stuff here
+    #augment here
 
-    #normalize to [-0.5, 0.5], [-1,1]
     if NORMALIZE:
-        normalized_image = ((img / 255.) - 1.).astype(np.float32)
-        normalized_keypoints = ((2. * keypoints / OUTPUT_SIZE) - 1.).astype(np.float32)
-    else:
-        normalized_image = img
-        normalized_keypoints = keypoints
+        img = ((img / 255.) - 1.).astype(np.float32)
+        keypoints = ((2. * keypoints / OUTPUT_SIZE) - 1.).astype('float32')
+        keypoints = np.tile(np.expand_dims(keypoints, 0), (num_cascades, 1, 1))
+        gaussians = np.tile(np.expand_dims(gaussians, 0), (num_cascades, 1, 1, 1))
 
-    gaussians = heatmap_targeter(keypoints)
-
-    print('gaussina hsape:', gaussians.shape)
-
-    return normalized_image, (gaussians.astype(np.float32), normalized_keypoints)
+    return img, (gaussians, keypoints)
 
 class LandmarkImageGenerator():
 
-    def __init__(self, preprocessed_datadir, input_image_size, heatmap_size, heatmap_std, **kwargs):
+    def __init__(self, preprocessed_datadir, input_image_size, heatmap_size, heatmap_std, num_cascades, **kwargs):
 
         self.heatmapper = HeatmapTargeter(input_image_size, heatmap_size, heatmap_std)
 
         keypoints_dir = os.path.join(preprocessed_datadir, 'keypoints')
         self.files = [os.path.join(keypoints_dir, filename) for filename in os.listdir(keypoints_dir)]
         self.i = 0
+        self.num_cascades = num_cascades
         self.prepare_input_kwargs = kwargs
 
 
@@ -236,7 +233,7 @@ class LandmarkImageGenerator():
 
             keypoints_filepath = self.files[self.i]
 
-            yield prepare_input(keypoints_filepath, self.heatmapper, **self.prepare_input_kwargs)
+            yield prepare_input(keypoints_filepath, self.heatmapper, self.num_cascades, **self.prepare_input_kwargs)
 
             self.i += 1
 
