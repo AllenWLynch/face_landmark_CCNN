@@ -6,8 +6,8 @@ import tensorflow.keras.layers as layers
 
 class FeatureSoftmaxLayer(layers.Layer):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def build(self, input_shape):
         (_, h, w, num_features) = input_shape
@@ -117,7 +117,7 @@ def HeatmapCNN(input_shape, num_features):
         ConvBNReluBlock(128,13),
         ConvBNReluBlock(256, 1),
         layers.Conv2D(num_features, 1),
-        FeatureSoftmaxLayer()
+        FeatureSoftmaxLayer(),
     ], name = 'HeatmapCNN')
 
 

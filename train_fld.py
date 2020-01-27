@@ -12,17 +12,19 @@ import data_utils
 #%%
 #__(1)__________Load Data_______________
 
-'''TRAIN_DIR = './HELEN/processed_samples/train'
-TEST_DIR = './HELEN/processed_samples/test'
+TRAIN_DIR = './HELEN/HELEN_dataset/train'
+TEST_DIR = './HELEN/HELEN_dataset/test'
 
-size_args = (256, 64, 2.5)
+generator_args = ((tf.float32, (tf.float32, tf.float32)), None, 
+                    training_utils.FLL_preprocces(3), 
+                    8, 5)
 
-training_generator = data_utils.LandmarkImageGenerator(TRAIN_DIR,*size_args, 3)
-testing_generator = data_utils.LandmarkImageGenerator(TEST_DIR, *size_args, 3)
+train_generator = training_utils.KeypointsDataset(TRAIN_DIR)
+train_dataset = training_utils.TFGenerator(train_generator, *generator_args)
 
-train_dataset = training_utils.FLDR_preprocessed_datagen(training_generator, batch_size=4)
-test_dataset = training_utils.FLDR_preprocessed_datagen(testing_generator, batch_size=4)
-'''
+test_generator = training_utils.KeypointsDataset(TEST_DIR)
+test_dataset = training_utils.TFGenerator(test_generator, *generator_args)
+
 
 #%%
 #__(2)__________Load Model_______________
@@ -37,9 +39,10 @@ optim = tf.keras.optimizers.Adam(1e-5)
 
 rccnn.compile(optimizer = optim, 
             loss = {
-                'heatmap_output' : training_utils.heatmap_loss, 
+                'heatmap_output' : tf.keras.losses.CategoricalCrossentropy(), 
                 'regression_output' : tf.keras.losses.MeanSquaredError()},
             metrics = {
+                'heatmap_output' : [tf.keras.metrics.CategoricalCrossentropy()],
                 'regression_output' : [tf.keras.metrics.MeanSquaredError()]
             })
 
@@ -56,17 +59,20 @@ CALLBACKS = [
             save_best_only = True,
             mode = 'min'),
     tf.keras.callbacks.TensorBoard(
-        './logs/',
-        histogram_freq = 1),
-    #training_utils.FLDRegressionCallback('./examples/', testing_generator)
+        'logs',
+        update_freq = 50),
+    training_utils.FLDRegressionCallback('./examples/', test_generator),
     tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss', patience = 5, min_lr = 1e-6),]
 
-rccnn.fit(train_dataset, 
-        epochs = 1, 
+rccnn.fit(tf_dataset, 
+        epochs = 1,
+        validation_data = test_dataset 
         steps_per_epoch = 2000,
-        validation_data = test_dataset,
-        validation_steps = 200,
-        callbacks = CALLBACKS)
+        validation_steps = 100,
+        verbose = 2,
+        callbacks = CALLBACKS,
+        use_multiprocessing = True,
+        workers = 4)
 
 
 
