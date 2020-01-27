@@ -34,13 +34,13 @@ In order to facilitate these augmentations, I first created a new dataset in whi
  | 6 | Crop the face from the stochastically-defined bounding box, then resize image to 256x256 for infeed to the<br>neural network. Translate the keypoint matrix accordingly. This step may be followed by more augmentations such as brightness<br> and contrast, as long as those augmentation do not affect the positions of the keypoints in the image. | <img src="readme_materials/final_crop.png" height="256" width="256"> |
  | 7 | Calculate the gaussians for heatmap targets from the final keypoint locations | |
 
-I planned to have this process done online during training, but augmenting the images and calculating the gaussian heatmap targets on-the-fly proved to be too intensive for my compute resources, even when using multiple workers. As a quick patch, I generated 7000 samples using the procedure outlined above with Spark, then attempted to use Tensorflow generators to read the samples into the training loop. These TF generators proved to be extremely buggy when working with multiple-input-output models such as this, so I ended up reading as many samples as possible into memory for an initial training test run. This initial training is ongoing.
+I planned to have this process done online during training, but augmenting the images and calculating the gaussian heatmap targets on-the-fly proved to be too intensive for my compute resources, even when using multiple workers. As a quick patch, I used Spark to generate 7000 samples using the procedure outlined above, then used python generators fed into tensorflow processing load samples. This initial training is ongoing.
 
 ## Results
 <hr>
-Training is onging. Given 5000 static samples, the network quickly learned the localization task. Surprisingly, validation data does not suggest overfitting on this small training set.
+Training is onging. Given 7000 static samples, the network quickly learned the localization task. Surprisingly, validation data does not suggest overfitting on this small training set.
 
-After 1.5 hours of training, the model produced this example, where it obviously can associate keypoints with their corresponding features, but the localization of its natural location still must be learned.
+After 1.5 hours of training, the model produced this example, where it obviously can associate keypoints with their corresponding features, but the localization is not precise.
 <img src="examples/training_loop_1.png" height="256" width="256">
 
 ## Future Directions
