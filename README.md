@@ -40,6 +40,9 @@ I planned to have this process done online during training, but augmenting the i
 <hr>
 Training is onging. Given 5000 static samples, the network quickly learned the localization task. Surprisingly, validation data does not suggest overfitting on this small training set.
 
+After 1.5 hours of training, the model produced this example, where it obviously can associate keypoints with their corresponding features, but the localization of its natural location still must be learned.
+<img src="examples/training_loop_1.png" height="256" width="256">
+
 ## Future Directions
 <hr>
 1. Find a solution for online data-augmentation. This may be renting cloud time where I can use more CPU resources for loading and augmenting data.

@@ -8,35 +8,114 @@ import datetime
 from random import shuffle
 
 
-class FLDRegressionCallback(tf.keras.callbacks.Callback):
+class FLLTrainer():
 
-    def __init__(self, save_dir, test_datagen):
-        newfilename = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.save_dir = os.path.join(save_dir, newfilename)
-        if not os.path.exists(self.save_dir):
-            os.mkdir(self.save_dir)
-        self.test_datagen = test_datagen
+    def __init__(self, model, optmizer, heatmap_loss_obj, regression_loss_obj, logger, 
+            heatmap_metrics, landmark_metrics, logger_steps = 50):
+        self.model = model
+        self.optim = optmizer
+        self.hm_loss = heatmap_loss_obj
+        self.regression_loss = regression_loss_obj
+        self.logger = logger
+        self.logger_steps = logger_steps
+        self.train_steps = 0
+        self.epoch_steps = 0
+        self.heatmap_metrics = heatmap_metrics
+        self.landmark_metrics = landmark_metrics
 
-    def on_epoch_begin(self, epoch, logs = None):
-        if epoch <= 1:
-            self.on_epoch_end(epoch - 1, logs)
-    
-    def on_epoch_end(self, epoch, logs = None):
-        
-        img, (heatmaps, keypoints) = next(iter(self.test_datagen()))
+    def train_epoch(self, steps, dataset):
 
-        heatmap, regression = self.model(np.array([img]))
+        for i, (image, (heatmap, landmarks)) in enumerate(dataset.take(steps)):
 
-        regression = regression[0][-1]
+            print('\rStep {}'.format(str(i + 1)), end = '')
 
-        coordinates = (regression + 1.) * 128. 
-        coordinates = np.clip(coordinates, 0, 256)
+            with tf.GradientTape() as tape:
 
-        unnorm_img = np.clip((255 * (img + 1.)).astype(int), 0, 255)
+                heatmap_prediction, regression_prediction = self.model(image)
 
-        img = show_keypoints(unnorm_img, coordinates)
+                heatmap_loss = self.hm_loss(heatmap, heatmap_prediction)
+                regression_loss = self.regression_loss(landmarks, regression_prediction)
 
-        cv2.imwrite(os.path.join(self.save_dir, 'epoch_{}.jpg'.format(str(epoch))), img)
+                loss = heatmap_loss + regression_loss
+
+            grads = tape.gradient(loss, self.model.trainable_weights)
+            self.optim.apply_gradients(zip(grads, self.model.trainable_weights))
+
+            if i % self.logger_steps == 0:
+                with self.logger.as_default():
+                    tf.summary.scalar('Heatmap Loss', heatmap_loss, step=self.train_steps)
+                    tf.summary.scalar('Regression Loss', regression_loss, step=self.train_steps)
+                    tf.summary.scalar('Total Loss', loss, step=self.train_steps)
+            self.train_steps = self.train_steps + 1
+        print('')
+
+    def evaluate(self, steps, dataset, num_examples):
+
+        examples = []
+        for i, (image, (heatmap, landmarks)) in enumerate(dataset.take(steps)):
+
+            print('\rValidation Step {}'.format(str(i+1)), end = '')
+
+            heatmap_prediction, regression_prediction = self.model(image)
+
+            for metric in self.heatmap_metrics:
+                metric(heatmap, heatmap_prediction)
+
+            for metric in self.landmark_metrics:
+                metric(landmarks, regression_prediction)
+
+            if len(examples) < num_examples:
+                examples.append((image[0], regression_prediction.numpy()[0][2]))
+
+        #manipulate examples
+        display_images = []
+        for (img, keypoints) in examples:
+            
+            #un-normalize
+            img = np.array((img + 0.5) * 255).astype('uint8')
+            keypoints = (keypoints + 1.) * 128
+
+            display_image = show_keypoints(img, keypoints)
+            display_images.append(display_image)
+
+        display = np.expand_dims(np.concatenate(display_images, axis = 1),0)
+
+        with self.logger.as_default():
+            tf.summary.image('Examples', display, step = self.epoch_steps)
+            for metric in self.heatmap_metrics:
+                tf.summary.scalar('Heatmap ' + metric.name, metric.result(), step = self.epoch_steps)
+            for metric in self.landmark_metrics:
+                tf.summary.scalar('Landmark ' + metric.name, metric.result(), step = self.epoch_steps)
+        print('')
+        self.epoch_steps = self.epoch_steps + 1
+
+    def fit(self, train_dataset, test_dataset, epochs, steps_per_epoch, evaluation_steps, checkpoint_manager, checkpoint_every):
+
+        try:
+            for epoch in range(epochs):
+                print('EPOCH ', epoch + 1)
+                
+                self.train_epoch(steps_per_epoch, train_dataset)
+
+                self.evaluate(evaluation_steps, test_dataset, 3)        
+
+                if (epoch + 1) % checkpoint_every == 0:
+                    checkpoint_manager.save()
+                    print('Saved Checkpoint!')    
+
+        except KeyboardInterrupt:
+            print('Training interupted!')
+            user_input = ''
+            while not (user_input == 'y' or user_input == 'n'):
+                user_input = input('Save model\'s current state?: [y/n]')
+            if user_input == 'y':
+                checkpoint_manager.save()
+                print('Saved checkpoint!')
+            
+        else:
+            print('Training complete! Saving final model.')
+            checkpoint_manager.save()
+
 
 def load_HELEN_dataset(DATADIR, cascades, proportion):
 
@@ -64,7 +143,7 @@ def load_HELEN_dataset(DATADIR, cascades, proportion):
         kpts = np.expand_dims(kpts, 0)
         kpts = np.tile(kpts, (cascades, 1,1))
 
-        image = (image / 255.) - 1.
+        image = (image / 255.) - 0.5
         kpts = (kpts / 128.) - 1.
 
         images.append(image)
@@ -87,8 +166,6 @@ class KeypointsDataset():
                         'heatmaps' : os.path.join(dir, 'heatmaps')}
 
         self.filepaths = self.list_filepaths(self.subdirs['images'])
-        shuffle(self.filepaths)
-
     
     @staticmethod
     def list_filepaths(dir):
@@ -96,6 +173,8 @@ class KeypointsDataset():
 
     def __call__(self):
         
+        shuffle(self.filepaths)
+
         i = 0
         while True:
 
@@ -107,7 +186,7 @@ class KeypointsDataset():
             heatmaps = np.load(os.path.join(self.subdirs['heatmaps'], basename))
             keypoints = np.load(os.path.join(self.subdirs['keypoints'], basename))
 
-            yield image, heatmaps, keypoints
+            yield image, (heatmaps, keypoints)
 
             i+=1
             if i >= len(self.filepaths):
@@ -119,12 +198,13 @@ class FLL_preprocces():
     def __init__(self, num_cascades):
         self.cascades = num_cascades
 
-    def __call__(self, x,y):
+    def __call__(self, x, y):
 
-        image, (heatmap, keypoints) = x,y
+        image = x
+        (heatmap, keypoints) = y
         
-        image = (image / 255.) - 1.
-        keypoints = (keypoints / 128.) - 1
+        image = (image / 255.) - 0.5
+        keypoints = (keypoints / 128.) - 1.
 
         keypoints = tf.expand_dims(keypoints, 0)
         heatmap = tf.expand_dims(heatmap, 0)
@@ -147,17 +227,3 @@ def TFGenerator(python_generator, datatypes, shapes, tf_preprocessing_fn, batch_
 
     return dataset
 
-if __name__ == "__main__":
-
-    DIR = './HELEN/HELEN_dataset/train'
-
-    X,Y = load_HELEN_dataset(DIR, 3, 0.05)
-
-    winname = 'Test'
-    img = show_keypoints(image, kpts)
-    cv2.namedWindow(winname)        # Create a named window
-    cv2.moveWindow(winname, 40,30)  # Move it to (40,30)
-    cv2.imshow(winname, img)
-    cv2.waitKey()
-    cv2.destroyAllWindows()
-# %%

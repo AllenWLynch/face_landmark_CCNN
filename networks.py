@@ -117,7 +117,7 @@ def HeatmapCNN(input_shape, num_features):
         ConvBNReluBlock(128,13),
         ConvBNReluBlock(256, 1),
         layers.Conv2D(num_features, 1),
-        FeatureSoftmaxLayer(),
+        FeatureSoftmaxLayer(dtype = tf.float32),
     ], name = 'HeatmapCNN')
 
 
@@ -211,8 +211,8 @@ def RCCNN(num_features, image_shape, num_cascades = 3):
         heatmaps.append(tf.expand_dims(heatmap, 1))
         regressions.append(tf.expand_dims(prediction,1))
 
-    heatmap_output = layers.Concatenate(axis = 1, dtype = 'float32', name = 'heatmap_output')(heatmaps)
-    regression_output = layers.Concatenate(axis = 1, dtype = 'float32', name = 'regression_output')(regressions)
+    heatmap_output = layers.Concatenate(axis = 1, dtype = tf.float32, name = 'heatmap_output')(heatmaps)
+    regression_output = layers.Concatenate(axis = 1, dtype = tf.float32, name = 'regression_output')(regressions)
 
     return tf.keras.Model(img, (heatmap_output, regression_output))
 
