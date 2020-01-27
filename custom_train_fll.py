@@ -1,6 +1,7 @@
 
 #%%
 import tensorflow as tf
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 import numpy as np
 import networks
 import cv2
@@ -12,9 +13,17 @@ import datetime
 #%%
 training_utils = importlib.reload(training_utils)
 #%%
+
+
+#%%
 if __name__ == "__main__":
 
+#__(0)___ Define policy
+    policy = mixed_precision.Policy('mixed_float16')
+    mixed_precision.set_policy(policy)
+
 #__(1)___ Load in data
+
 
     TRAIN_DIR = './HELEN/HELEN_dataset/train'
     TEST_DIR = './HELEN/HELEN_dataset/test'
@@ -22,7 +31,7 @@ if __name__ == "__main__":
     dataset_args = ((tf.float32, (tf.float32, tf.float32)),
                         (tf.TensorShape([256,256,3]), (tf.TensorShape([64,64,194]), tf.TensorShape([194,2]))), 
                         training_utils.FLL_preprocces(3), 
-                        1, 5)
+                        16, 5)
 
     train_dataset = training_utils.TFGenerator(training_utils.KeypointsDataset(TRAIN_DIR), *dataset_args)
                         
@@ -67,10 +76,10 @@ if __name__ == "__main__":
 #__(5)____ Train it
 
     EPOCHS = 100
-    STEPS_PER_EPOCH = 10
-    EVAL_STEPS = 100
-    LOGSTEPS = 50
-    CHECKPOINT_EVERY = 5
+    STEPS_PER_EPOCH = 200
+    EVAL_STEPS = 10
+    LOGSTEPS = 10
+    CHECKPOINT_EVERY = 3
 
     heatmap_loss_obj = tf.keras.losses.CategoricalCrossentropy()
     regression_loss_obj = tf.keras.losses.MeanSquaredError()
@@ -80,6 +89,7 @@ if __name__ == "__main__":
 
     LEARNING_RATE = 1e-5
     optim = tf.keras.optimizers.Adam(LEARNING_RATE)
+    optim = mixed_precision.LossScaleOptimizer(optim, loss_scale = 'dynamic')
 
     trainer = training_utils.FLLTrainer(rccnn, optim, heatmap_loss_obj, regression_loss_obj, log_writer, 
             heatmap_metrics, regression_metrics)

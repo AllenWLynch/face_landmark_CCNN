@@ -117,6 +117,7 @@ def HeatmapCNN(input_shape, num_features):
         ConvBNReluBlock(128,13),
         ConvBNReluBlock(256, 1),
         layers.Conv2D(num_features, 1),
+        #layer.Activation('linear', dtype=tf.float32),
         FeatureSoftmaxLayer(dtype = tf.float32),
     ], name = 'HeatmapCNN')
 
@@ -152,8 +153,8 @@ def RegressionPredictionCNN(num_features, input_shape):
         ConvBNReluBlock(512, 1),
         layers.Flatten(),
         #layers.Conv2D(2*num_features, 1),
-        layers.Dense(2*num_features),
-        layers.Reshape((num_features, 2))
+        layers.Dense(2*num_features, dtype = 'float32'),
+        layers.Reshape((num_features, 2), dtype = 'float32')
     ], name = 'OutCNN')
 
 def CascadingRegressionCNN(num_features, feature_input_shape, heatmap_shape, prev_regression_feature_shape):

@@ -23,23 +23,32 @@ class FLLTrainer():
         self.heatmap_metrics = heatmap_metrics
         self.landmark_metrics = landmark_metrics
 
+    @tf.function()
+    def _train_step(self, image, heatmap, landmarks):
+        with tf.GradientTape() as tape:
+
+            heatmap_prediction, regression_prediction = self.model(image, training = True)
+
+            heatmap_loss = self.hm_loss(heatmap, heatmap_prediction)
+            regression_loss = self.regression_loss(landmarks, regression_prediction)
+
+            loss = heatmap_loss + regression_loss
+
+            scaled_loss = self.optim.get_scaled_loss(loss)
+
+        scaled_gradients  = tape.gradient(loss, self.model.trainable_weights)
+        grads = self.optim.get_unscaled_gradients(scaled_gradients)
+        self.optim.apply_gradients(zip(grads, self.model.trainable_weights))
+
+        return loss, heatmap_loss, regression_loss
+
     def train_epoch(self, steps, dataset):
 
         for i, (image, (heatmap, landmarks)) in enumerate(dataset.take(steps)):
 
             print('\rStep {}'.format(str(i + 1)), end = '')
 
-            with tf.GradientTape() as tape:
-
-                heatmap_prediction, regression_prediction = self.model(image)
-
-                heatmap_loss = self.hm_loss(heatmap, heatmap_prediction)
-                regression_loss = self.regression_loss(landmarks, regression_prediction)
-
-                loss = heatmap_loss + regression_loss
-
-            grads = tape.gradient(loss, self.model.trainable_weights)
-            self.optim.apply_gradients(zip(grads, self.model.trainable_weights))
+            loss, heatmap_loss, regression_loss = self._train_step(image, heatmap, landmarks)
 
             if i % self.logger_steps == 0:
                 with self.logger.as_default():
@@ -49,6 +58,11 @@ class FLLTrainer():
             self.train_steps = self.train_steps + 1
         print('')
 
+    
+    @tf.function()
+    def _test_step(self, image):
+        return self.model(image, training = False)
+
     def evaluate(self, steps, dataset, num_examples):
 
         examples = []
@@ -56,7 +70,7 @@ class FLLTrainer():
 
             print('\rValidation Step {}'.format(str(i+1)), end = '')
 
-            heatmap_prediction, regression_prediction = self.model(image)
+            heatmap_prediction, regression_prediction = self._train_step(image)
 
             for metric in self.heatmap_metrics:
                 metric(heatmap, heatmap_prediction)
@@ -198,6 +212,7 @@ class FLL_preprocces():
     def __init__(self, num_cascades):
         self.cascades = num_cascades
 
+    @tf.function()
     def __call__(self, x, y):
 
         image = x
