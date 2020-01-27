@@ -18,7 +18,7 @@ class FLDRegressionCallback(tf.keras.callbacks.Callback):
         self.test_datagen = test_datagen
 
     def on_epoch_begin(self, epoch, logs = None):
-        if epoch =< 1:
+        if epoch <= 1:
             self.on_epoch_end(epoch - 1, logs)
     
     def on_epoch_end(self, epoch, logs = None):
@@ -37,6 +37,45 @@ class FLDRegressionCallback(tf.keras.callbacks.Callback):
         img = show_keypoints(unnorm_img, coordinates)
 
         cv2.imwrite(os.path.join(self.save_dir, 'epoch_{}.jpg'.format(str(epoch))), img)
+
+def load_HELEN_dataset(DATADIR, cascades, proportion):
+
+    files = [os.path.join(DATADIR, 'images', filename) for filename in os.listdir(os.path.join(DATADIR, 'images'))]
+    shuffle(files)
+
+    images = []
+    heatmaps = []
+    keypoints = []
+
+    for i, filepath in enumerate(files[:int(proportion * len(files))]):
+
+        print('\rRead in {} files'.format(str(i)), end = '')
+        image_filepath = filepath
+        image = cv2.imread(image_filepath)
+
+        basename = os.path.basename(image_filepath)[:-4] + '.npy'
+
+        heatmap = np.load(os.path.join(DATADIR, 'heatmaps', basename))
+        kpts = np.load(os.path.join(DATADIR, 'keypoints', basename))
+
+        heatmap = np.expand_dims(heatmap, 0)
+        heatmap = np.tile(heatmap, (cascades, 1,1,1))
+
+        kpts = np.expand_dims(kpts, 0)
+        kpts = np.tile(kpts, (cascades, 1,1))
+
+        image = (image / 255.) - 1.
+        kpts = (kpts / 128.) - 1.
+
+        images.append(image)
+        heatmaps.append(heatmap)
+        keypoints.append(kpts)
+
+    heatmaps = np.array(heatmaps).astype('float32')
+    keypoints = np.array(keypoints).astype('float32')
+    images = np.array(images).astype('float32')
+
+    return images, (heatmaps, keypoints)
 
 
 class KeypointsDataset():
@@ -68,25 +107,21 @@ class KeypointsDataset():
             heatmaps = np.load(os.path.join(self.subdirs['heatmaps'], basename))
             keypoints = np.load(os.path.join(self.subdirs['keypoints'], basename))
 
-            yield image, (heatmaps, keypoints)
+            yield image, heatmaps, keypoints
 
             i+=1
             if i >= len(self.filepaths):
                 i = 0
                 shuffle(self.filepaths)
-
+        
 class FLL_preprocces():
 
     def __init__(self, num_cascades):
         self.cascades = num_cascades
 
-    def __call__(self, x, y):
+    def __call__(self, x,y):
 
-        image = x
-        heatmap, keypoints = y
-
-        print(x.shape)
-        print(y[0].shape, y[1].shape)
+        image, (heatmap, keypoints) = x,y
         
         image = (image / 255.) - 1.
         keypoints = (keypoints / 128.) - 1
@@ -103,7 +138,6 @@ class FLL_preprocces():
 
         return image, (heatmap, keypoints)
 
-
 def TFGenerator(python_generator, datatypes, shapes, tf_preprocessing_fn, batch_size, prefetch_num):
 
     dataset = tf.data.Dataset.from_generator(python_generator, datatypes, shapes)
@@ -113,24 +147,17 @@ def TFGenerator(python_generator, datatypes, shapes, tf_preprocessing_fn, batch_
 
     return dataset
 
+if __name__ == "__main__":
 
-'''
-generator = KeypointsDataset(DIR)
+    DIR = './HELEN/HELEN_dataset/train'
 
-d = TFGenerator(generator, 
-                (tf.float32, (tf.float32, tf.float32)), None,
-                #(tf.TensorShape([None,256,256,3]), (tf.TensorShape([None,3,64,64,194]), tf.TensorShape([None,3,194,2]))),   
-                FLL_preprocces(3), 8, 3)
+    X,Y = load_HELEN_dataset(DIR, 3, 0.05)
 
-i = d.make_one_shot_iterator()
-
-print(i.get_next())
-
-winname = 'Test'
-img = show_keypoints(image, kpts)
-cv2.namedWindow(winname)        # Create a named window
-cv2.moveWindow(winname, 40,30)  # Move it to (40,30)
-cv2.imshow(winname, img)
-cv2.waitKey()
-cv2.destroyAllWindows()'''
+    winname = 'Test'
+    img = show_keypoints(image, kpts)
+    cv2.namedWindow(winname)        # Create a named window
+    cv2.moveWindow(winname, 40,30)  # Move it to (40,30)
+    cv2.imshow(winname, img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 # %%

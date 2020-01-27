@@ -12,19 +12,28 @@ import data_utils
 #%%
 #__(1)__________Load Data_______________
 
+#BAD GENERATOR STUFF
 TRAIN_DIR = './HELEN/HELEN_dataset/train'
 TEST_DIR = './HELEN/HELEN_dataset/test'
 
-generator_args = ((tf.float32, (tf.float32, tf.float32)), None, 
+
+'''train_generator = training_utils.KeypointsDataset(TRAIN_DIR)
+train_dataset = training_utils.TFGenerator(train_generator, 
+                    (tf.float32, (tf.float32, tf.float32)),
+                    (tf.TensorShape([256,256,3]), tf.TensorShape([64,64,194]), tf.TensorShape([194,2])), 
                     training_utils.FLL_preprocces(3), 
                     8, 5)
 
-train_generator = training_utils.KeypointsDataset(TRAIN_DIR)
-train_dataset = training_utils.TFGenerator(train_generator, *generator_args)
 
-test_generator = training_utils.KeypointsDataset(TEST_DIR)
-test_dataset = training_utils.TFGenerator(test_generator, *generator_args)
+#test_generator = training_utils.KeypointsDataset(TEST_DIR)
+#test_dataset = training_utils.TFGenerator(test_generator, (tf.float32, (tf.float32, tf.float32)),
+#                    (tf.TensorShape([256,256,3]), (tf.TensorShape([64,64,194]),tf.TensorShape([194,2]))), 
+#                    training_utils.FLL_preprocces(3), 
+#                    8, 5)'''
 
+#__(1a)____ Load data___________________
+
+X,Y = training_utils.load_HELEN_dataset(TRAIN_DIR, 3, 0.25)
 
 #%%
 #__(2)__________Load Model_______________
@@ -54,25 +63,24 @@ checkpoint_prefix  = os.path.join(CHECKPOINT_DIR, 'ckpt_{epoch}')
 CALLBACKS = [
     tf.keras.callbacks.ModelCheckpoint(
             filepath=checkpoint_prefix,
-            monitor = 'val_loss',
-            save_weights_only=True,
-            save_best_only = True,
-            mode = 'min'),
+            save_weights_only=True),
     tf.keras.callbacks.TensorBoard(
         'logs',
         update_freq = 50),
-    training_utils.FLDRegressionCallback('./examples/', test_generator),
+    #training_utils.FLDRegressionCallback('./examples/', test_generator),
     tf.keras.callbacks.ReduceLROnPlateau(monitor = 'val_loss', patience = 5, min_lr = 1e-6),]
 
-rccnn.fit(tf_dataset, 
-        epochs = 1,
-        validation_data = test_dataset 
-        steps_per_epoch = 2000,
-        validation_steps = 100,
-        verbose = 2,
-        callbacks = CALLBACKS,
-        use_multiprocessing = True,
-        workers = 4)
+rccnn.fit(
+            x = X,
+            y = Y,
+            batch_size = 12,
+            epochs = 50,
+            callbacks = CALLBACKS,
+            validation_split = 0.05,
+)
+
+
+
 
 
 
