@@ -23,15 +23,15 @@ Pre-processing for images fed into the network required careful execution, as ra
 
 In order to facilitate these augmentations, I first created a new dataset in which the maximum image size was reduced to approximately 750 x 750 pixels to reduce read-time, then these images were piped through the following steps to produce stochastic close-crops of subjects' faces:
 
- | Step | Description | Example <div style="width:290px"></div> |
+ | Step | Description | Example |   
  | --- | --- | --- |
- | 0 | Rotate the face randomly by some angle constrained to +- 10-15 degrees. Use a rotation matrix to rotate the keypoints matrix accordingly. | |
- | 1 | Find the minimum box shape that will contain all keypoints by taking the maximum and minimum along both axes | <img src="readme_materials/initial_keypoint_box.png" height="256" width="256"> |
+ | 0 | Rotate the face randomly by some angle constrained to +- 10-15 degrees. <br>Use a rotation matrix to rotate the keypoints matrix accordingly. | |
+ | 1 | Find the minimum box shape that will contain all keypoints by taking <br>the maximum and minimum along both axes | <img src="readme_materials/initial_keypoint_box.png" height="256" width="256"> |
  | 2 | Increase height of box with scalar constant to include forehead (1.4 in my case) | <img src="readme_materials/forehead_box.png" height="256" width="256"> |
- | 3 | Define largest and smallest possible crops, smallest being the size of the box in step 1, the largest being a box that which the area is some pre-defined constant larger than the area covered by the face. This scale, for which I used 2.0, controls zoom. Box size was also limited by boundary effects in the image.| <img src="readme_materials/possible_bounding_boxes.png" height="256" width="256"> |
- | 4 | Sample a box size from all possible sizes (uniformly), then define the possible region in which the upper left corner might be placed such that this box contains all keypoints. | <img src="readme_materials/sample_corner.png" height="256" width="256"> |
+ | 3 | Define largest and smallest possible crops, smallest being the size in step 1, <br> the largest being a box that which the area is some pre-defined constant larger  <br>than the area covered by the face. <br> This scale, for which I used 2.0, controls zoom. <br> Box size was also limited by boundary effects in the image.| <img src="readme_materials/possible_bounding_boxes.png" height="256" width="256"> |
+ | 4 | Sample a box size from all possible sizes (uniformly), <br> then define the possible region in which the upper left corner <br> might be placed such that this box contains all keypoints. | <img src="readme_materials/sample_corner.png" height="256" width="256"> |
  | 5 | Sample a point from this region (uniformly) to be the upper left corner of the crop box. This fulfils the role of translation augmentation. | <img src="readme_materials/corner_sampled.png" height="256" width="256"> |
- | 6 | Crop the face from the stochastically-defined bounding box, then resize image to 256x256 for infeed to theneural network. Translate the keypoint matrix accordingly. This step may be followed by more augmentations such as brightness and contrast, as long as those augmentation do not affect the positions of the keypoints in the image. | <img src="readme_materials/final_crop.png" height="256" width="256"> |
+ | 6 | Crop the face from the stochastically-defined bounding box, <br> then resize image to 256x256 for infeed to the neural network. <br> Translate the keypoint matrix accordingly. <br> This step may be followed by more augmentations such as brightness and contrast, <br> as long as those augmentation do not affect the positions of the keypoints in the image. | <img src="readme_materials/final_crop.png" height="256" width="256"> |
  | 7 | Calculate the gaussians for heatmap targets from the final keypoint locations | |
 
 I planned to have this process done online during training, but augmenting the images and calculating the gaussian heatmap targets on-the-fly proved to be too intensive for my compute resources, even when using multiple workers. As a quick patch, I used Spark to generate 7000 samples using the procedure outlined above, then used python generators fed into tensorflow processing load samples. This initial training is ongoing.
