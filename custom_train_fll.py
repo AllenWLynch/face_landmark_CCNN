@@ -75,9 +75,9 @@ if __name__ == "__main__":
 #%%
 #__(5)____ Train it
 
-    EPOCHS = 100
+    EPOCHS = 400
     STEPS_PER_EPOCH = 200
-    EVAL_STEPS = 10
+    EVAL_STEPS = 20
     LOGSTEPS = 10
     CHECKPOINT_EVERY = 3
 
@@ -88,6 +88,11 @@ if __name__ == "__main__":
     regression_metrics = [tf.keras.metrics.MeanSquaredError()]
 
     LEARNING_RATE = 1e-5
+    lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        LEARNING_RATE,
+        decay_steps=5000,
+        decay_rate=0.96,
+        staircase=True)
     optim = tf.keras.optimizers.Adam(LEARNING_RATE)
     optim = mixed_precision.LossScaleOptimizer(optim, loss_scale = 'dynamic')
 
@@ -95,4 +100,4 @@ if __name__ == "__main__":
             heatmap_metrics, regression_metrics)
 
 #%%
-    trainer.fit(train_dataset, test_dataset, EPOCHS, STEPS_PER_EPOCH, EVAL_STEPS, manager, CHECKPOINT_EVERY)
+    trainer.fit(train_dataset, test_dataset, EPOCHS, STEPS_PER_EPOCH, EVAL_STEPS, manager, CHECKPOINT_EVERY, fp16 = True)

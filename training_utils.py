@@ -24,7 +24,7 @@ class FLLTrainer():
         self.landmark_metrics = landmark_metrics
 
     @tf.function()
-    def _train_step(self, image, heatmap, landmarks):
+    def _train_step_fp16(self, image, heatmap, landmarks):
         with tf.GradientTape() as tape:
 
             heatmap_prediction, regression_prediction = self.model(image, training = True)
@@ -36,19 +36,39 @@ class FLLTrainer():
 
             scaled_loss = self.optim.get_scaled_loss(loss)
 
-        scaled_gradients  = tape.gradient(loss, self.model.trainable_weights)
+        scaled_gradients  = tape.gradient(scaled_loss, self.model.trainable_weights)
         grads = self.optim.get_unscaled_gradients(scaled_gradients)
         self.optim.apply_gradients(zip(grads, self.model.trainable_weights))
 
         return loss, heatmap_loss, regression_loss
 
-    def train_epoch(self, steps, dataset):
+    @tf.function()
+    def _train_step(self, image, heatmap, landmarks):
+        assert(False), 'Don\'t use this'
+        with tf.GradientTape() as tape:
+
+            heatmap_prediction, regression_prediction = self.model(image, training = True)
+
+            heatmap_loss = self.hm_loss(heatmap, heatmap_prediction)
+            regression_loss = self.regression_loss(landmarks, regression_prediction)
+
+            loss = heatmap_loss + regression_loss
+
+        grads  = tape.gradient(loss, self.model.trainable_weights)
+        self.optim.apply_gradients(zip(grads, self.model.trainable_weights))
+
+        return loss, heatmap_loss, regression_loss
+
+    def train_epoch(self, steps, dataset, fp16=False):
 
         for i, (image, (heatmap, landmarks)) in enumerate(dataset.take(steps)):
 
             print('\rStep {}'.format(str(i + 1)), end = '')
 
-            loss, heatmap_loss, regression_loss = self._train_step(image, heatmap, landmarks)
+            if fp16:    
+                loss, heatmap_loss, regression_loss = self._train_step_fp16(image, heatmap, landmarks)
+            else:
+                loss, heatmap_loss, regression_loss = self._train_step(image, heatmap, landmarks)
 
             if i % self.logger_steps == 0:
                 with self.logger.as_default():
@@ -70,7 +90,7 @@ class FLLTrainer():
 
             print('\rValidation Step {}'.format(str(i+1)), end = '')
 
-            heatmap_prediction, regression_prediction = self._train_step(image)
+            heatmap_prediction, regression_prediction = self._test_step(image)
 
             for metric in self.heatmap_metrics:
                 metric(heatmap, heatmap_prediction)
@@ -103,13 +123,13 @@ class FLLTrainer():
         print('')
         self.epoch_steps = self.epoch_steps + 1
 
-    def fit(self, train_dataset, test_dataset, epochs, steps_per_epoch, evaluation_steps, checkpoint_manager, checkpoint_every):
+    def fit(self, train_dataset, test_dataset, epochs, steps_per_epoch, evaluation_steps, checkpoint_manager, checkpoint_every, fp16 = False):
 
         try:
             for epoch in range(epochs):
                 print('EPOCH ', epoch + 1)
                 
-                self.train_epoch(steps_per_epoch, train_dataset)
+                self.train_epoch(steps_per_epoch, train_dataset, fp16=fp16)
 
                 self.evaluate(evaluation_steps, test_dataset, 3)        
 

@@ -3,6 +3,7 @@
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.layers as layers
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 class FeatureSoftmaxLayer(layers.Layer):
 
@@ -265,8 +266,14 @@ def priors_RCCNN(num_features, image_shape, prior_shape, num_cascades = 3):
 
 
 if __name__ == "__main__":
+
+    policy = mixed_precision.Policy('mixed_float16')
+    mixed_precision.set_policy(policy)
+
     net = RCCNN(194, (256,256,3))
 
     batch = np.random.rand(16,256,256,3)
 
     output = net(batch)
+
+# %%

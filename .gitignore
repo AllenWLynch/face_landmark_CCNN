@@ -3,4 +3,3 @@ logs/
 __pycache__/
 HELEN/
 checkpoints/
-examples/
