@@ -38,13 +38,24 @@ I planned to have this process done online during training, but augmenting the i
 
 ## Results
 <hr>
-Training is onging. Given 7000 static samples, the network quickly learned the localization task. Surprisingly, validation data does not suggest overfitting on this small training set. After 1.5 hours of training, the model produced this example, where it obviously can associate keypoints with their corresponding features, but the localization is not precise.<br>
-<img src="examples/training_loop_1.png" height="256" width="256">
+Training is onging. Given 7000 static samples and one night of training, it was evident the model was succeeding in the task of learning landmark localization, but generatlization was poor. This was evident first in the higher test set error observed during training, which suggests the model overfit the training set, and later during study of the results. Shown below are images from the test and training sets, respectively. Each image in the row is overlayed with the landmark estimates from each recurrent pass.<br>
+
+<img src="examples/test_set_rd1_results.jpg"><br>
+<img src="examples/train_set_rd1_results.jpg"><br>
+Figure: Test set (top) and training set (bottom) images, shown with landmark estimations from successive passes of the recurrent cascading CNN model.
+
+First, the model produced higher-quality landmarks for the training set image than the test image, but is still able to regress landmarks on test-set images to a reasonable degree. In the 194-point HELEN dataset, placement of the landmarks is much more complicated function than in labeling schemes with fewer keypoints where the keypoints inhabit more distinct spaces. I expect this model would perform well on an easier scheme with few modifications. 
+
+Also, I was excited to see the recurrent mechanism does appear to effectively refine the landmark estimates with each pass. This is especially apparent when observing the change in landmark estimation of the test-set subject's right eye. Which is gradually localized to the correct location.
+
+I predict the disparity in training and test set performance on this dataset has more to do with the lack of diversity in the training set than overfitting, as the model has room to improve on the training set while I am using 7000 pre-cooked samples with very light augmentation. To rectify this, I want to execute my original goal of augmenting images online during training, while also increasing the severity of the augmentations. This will duely serve to prevent memorization of my training set while increasing the robustness of the model. This alone may boost performance on test set images, but I can regularize the model as well if test set performance still lags. 
 
 ## Future Directions
 <hr>
+
 1. Find a solution for online data-augmentation. This may be renting cloud time where I can use more CPU resources for loading and augmenting data.
-2. Incorporate spatial transformers and attention models into the architecture defined above. Compare accuracy to the literature model.
+2. Reduce the standard deviation of the gaussian heatmap targets. They may be too coarse for landmark estimation in point-dense regions.
+3. Incorporate spatial transformers and attention models into the architecture defined above. Compare accuracy to the literature model.
 
 ## References
 <hr>

@@ -76,10 +76,10 @@ if __name__ == "__main__":
 #__(5)____ Train it
 
     EPOCHS = 400
-    STEPS_PER_EPOCH = 200
-    EVAL_STEPS = 20
+    STEPS_PER_EPOCH = 400
+    EVAL_STEPS = 40
     LOGSTEPS = 10
-    CHECKPOINT_EVERY = 3
+    CHECKPOINT_EVERY = 5
 
     heatmap_loss_obj = tf.keras.losses.CategoricalCrossentropy()
     regression_loss_obj = tf.keras.losses.MeanSquaredError()
