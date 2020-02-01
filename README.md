@@ -50,6 +50,10 @@ Also, I was excited to see the recurrent mechanism does appear to effectively re
 
 I predict the disparity in training and test set performance on this dataset has more to do with the lack of diversity in the training set than overfitting, as the model has room to improve on the training set while I am using 7000 pre-cooked samples with very light augmentation. To rectify this, I want to execute my original goal of augmenting images online during training, while also increasing the severity of the augmentations. This will duely serve to prevent memorization of my training set while increasing the robustness of the model. This alone may boost performance on test set images, but I can regularize the model as well if test set performance still lags. 
 
+Below is a comparison of MSE of landmarks estimated after this first attempt at training the model. This quantizes the model's poor generality when moving off training data. Training on more diverse training could close this gap, while training for longer should decrease at least the training set error.<br><br>
+<img src='readme_materials/mse.png'>
+
+
 ## Future Directions
 <hr>
 
