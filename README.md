@@ -8,7 +8,8 @@ Facial landmark localization (FLL) is an important computer vision problem invol
 <hr>
 My model is a fusion of the ideas of (1) and (2) featuring a recurrent cascading CNN (RCCNN) scheme that has been shown to increase the accuracy of heatmap and regression predictions on each pass. Loss is assessed after each recurrent estimationto assist with backpropagation<br><br>
 
-<img src="./readme_materials/network.png">
+<img align="center" src="./readme_materials/network.png"><br>
+Figure 1. Recurrent cascading CNN diagram.
 
 ## Training Objective
 
@@ -34,32 +35,52 @@ In order to facilitate these augmentations, I first created a new dataset in whi
  | 6 | Crop the face from the stochastically-defined bounding box, <br> then resize image to 256x256 for infeed to the neural network. <br> Translate the keypoint matrix accordingly. <br> This step may be followed by more augmentations such as brightness and contrast, <br> as long as those augmentation do not affect the positions of the keypoints in the image. | <img src="readme_materials/final_crop.png" height="256" width="256"> |
  | 7 | Calculate the gaussians for heatmap targets from the final keypoint locations | |
 
-I planned to have this process done online during training, but augmenting the images and calculating the gaussian heatmap targets on-the-fly proved to be too intensive for my compute resources, even when using multiple workers. As a quick patch, I used Spark to generate 7000 samples using the procedure outlined above, then used python generators fed into tensorflow processing load samples. This initial training is ongoing.
+I planned to have this process done online during training, but augmenting the images and calculating the gaussian heatmap targets on-the-fly proved to be too intensive for my compute resources, even when using multiple workers. As a quick patch, I used Spark to generate 7000 samples using the procedure outlined above, then used python generators fed into tensorflow processing load samples. 
 
 ## Results
+
+Train time: 24 hrs, 2e6 samples
+Training set: 7000 pre-augmented samples, 3 from each image in the original HELEN dataset
+Test set: 300 randomly-selected samples removed from the training set
+
+The train and test error continues to decrease gradually after 24 hours, but I need my machine for other projects and so I cut the training short. Below are a sample of localizations from the test set.
 <hr>
-Training is onging. Given 7000 static samples and one night of training, it was evident the model was succeeding in the task of learning landmark localization, but generatlization was poor. This was evident first in the higher test set error observed during training, which suggests the model overfit the training set, and later during study of the results. Shown below are images from the test and training sets, respectively. Each image in the row is overlayed with the landmark estimates from each recurrent pass.<br>
+<img src="readme_materials/test_image_square.jpg">
+<br>Figure 2. Samples of localizations on test set.<br><hr>
+Purely from observation, the model seems to be making quality predictions and is generalizing well. Surprisingly, the most error-prone areas appear to be the points surrounding the face rather than in densely-labeled regions like the eyes and lips, which are fit to highly expressive areas of the face where quality placement depends on coordinating multiple landmarks for a smooth edge. This contradicts my predictions, and might be because there are fewer points bounding the face, so they contribute less to the loss. This may be rectified with loss weighting, or just more training. The per-landmark loss is plotted in Figure 3, noted as the size of the dot. Indeed, the face-bounding points showed the highest errors.<br><hr>
+<img src="readme_materials/per_landmark_error.png">
+<br>Figure 3. Per-landmark loss.<br><hr>
 
-<img src="examples/test_set_rd1_results.jpg"><br>
-<img src="examples/train_set_rd1_results.jpg"><br>
-Figure: Test set (top) and training set (bottom) images, shown with landmark estimations from successive passes of the recurrent cascading CNN model.
+Judging by the discrepancy in testing and training loss for landmark localization, shown in Figure 4, the model is overfitting to the training set. This could be due to things:
 
-First, the model produced higher-quality landmarks for the training set image than the test image, but is still able to regress landmarks on test-set images to a reasonable degree. In the 194-point HELEN dataset, placement of the landmarks is much more complicated function than in labeling schemes with fewer keypoints where the keypoints inhabit more distinct spaces. I expect this model would perform well on an easier scheme with few modifications. 
-
-Also, I was excited to see the recurrent mechanism does appear to effectively refine the landmark estimates with each pass. This is especially apparent when observing the change in landmark estimation of the test-set subject's right eye. Which is gradually localized to the correct location.
-
-I predict the disparity in training and test set performance on this dataset has more to do with the lack of diversity in the training set than overfitting, as the model has room to improve on the training set while I am using 7000 pre-cooked samples with very light augmentation. To rectify this, I want to execute my original goal of augmenting images online during training, while also increasing the severity of the augmentations. This will duely serve to prevent memorization of my training set while increasing the robustness of the model. This alone may boost performance on test set images, but I can regularize the model as well if test set performance still lags. 
-
-Below is a comparison of MSE of landmarks estimated after this first attempt at training the model. This quantizes the model's poor generality when moving off training data. Training on more diverse training could close this gap, while training for longer should decrease at least the training set error.<br><br>
-<img src='readme_materials/mse.png'>
-
-
-## Future Directions
+1. I am training with positionally-static images. For high dimensional data, this causes a model to be prone to overfitting.
+2. I have not regularized my network.
+<hr>
+<img src='readme_materials/test_vs_train.png'>
+<br>Figure 4. Training vs. testing loss.<br>
 <hr>
 
+Regularizing my network too much will decrease its expressive capacity, and since the model has not managed to solve the training set, I will opt for this approach for reducing test set error. Instead, I fill focus on online augmented sample generation to make a more robust and generalizable model.
+
+Lastly, I analyzed the effect of the recurrent mechanism in my localization network. Shown in Figure 5, the regression (MSE) losses decline drastically from the first to second applications, then remain static. The crossentropy heatmap loss, however, declined from cascade 1 to 2, then increased on the third pass. This suggests the heatmap network is overfitting and is not making meanful refinements after the second pass. In turn, this may be effecting the ability of the regression network to refine its prediction. To test this, I intend to make the heatmap objective more difficult by reducing the standard deviation of the heatmap gaussians from the literature suggestion 2.5, 1. Also, I will create a seperate feature stream for the regression modules to detangle the heatmap and regression objectives' gradients.
+<hr>
+<img src='readme_materials/cascades_mse.png'><br>Figure 5. Regression loss with each application of the recurrent module>
+<br><img src='readme_materials/ce_loss.png'><br>Figure 6. Crossentropy loss of the heatmap with each application of the recurrent module.<br>
+<hr>
+ 
+## What's Next
+<hr>
+
+To improve my model, I have a series of decisions to make. Since training time is so long, I have to test multiple ideas at once.
+### Phase 1:
 1. Find a solution for online data-augmentation. This may be renting cloud time where I can use more CPU resources for loading and augmenting data.
 2. Reduce the standard deviation of the gaussian heatmap targets. They may be too coarse for landmark estimation in point-dense regions.
-3. Incorporate spatial transformers and attention models into the architecture defined above. Compare accuracy to the literature model.
+3. Add a seperate feature network for regression predictions.
+Train and test network after making these modifications.
+
+### Phase 2:
+1. Introduce uniform prior heatmap and remove non-recurrent heatmap network. This will save 5 million parameters.
+2. Incorporate self-attentive layers intead of the large 13x13 convolution in the heatmap network. This will save more parameters, and may also be more effective.
 
 ## References
 <hr>

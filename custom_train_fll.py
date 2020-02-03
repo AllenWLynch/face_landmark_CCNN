@@ -48,7 +48,7 @@ if __name__ == "__main__":
 #%%
 #__(3)___ Define model checkpointer
 
-    LOAD_FROM_CHECKPOINT = False
+    LOAD_FROM_CHECKPOINT = True
     CHECKPOINT_DIR = './checkpoints'
 
     checkpoint = tf.train.Checkpoint(landmark_cascade = rccnn)
@@ -75,7 +75,7 @@ if __name__ == "__main__":
 #%%
 #__(5)____ Train it
 
-    EPOCHS = 400
+    EPOCHS = 150
     STEPS_PER_EPOCH = 400
     EVAL_STEPS = 40
     LOGSTEPS = 10
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     heatmap_metrics = [tf.keras.metrics.CategoricalCrossentropy()]
     regression_metrics = [tf.keras.metrics.MeanSquaredError()]
 
-    LEARNING_RATE = 1e-5
+    LEARNING_RATE = 2e-6
     lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         LEARNING_RATE,
         decay_steps=5000,

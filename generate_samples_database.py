@@ -9,7 +9,7 @@ NUMREPS = 3
 
 files = [os.path.join(DATADIR, 'images', filename) for filename in os.listdir(os.path.join(DATADIR, 'images'))]
 
-heatmapper = data_utils.HeatmapTargeter(256,64,2.5)
+heatmapper = data_utils.HeatmapTargeter(256,64,1)
 
 samples_generated = 6390
 for i, image_filepath in enumerate(files):
