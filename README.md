@@ -8,7 +8,7 @@ Facial landmark localization (FLL) is an important computer vision problem invol
 <hr>
 My model is a fusion of the ideas of (1) and (2) featuring a recurrent cascading CNN (RCCNN) scheme that has been shown to increase the accuracy of heatmap and regression predictions on each pass. Loss is assessed after each recurrent estimationto assist with backpropagation<br><br>
 
-<img align="center" src="./readme_materials/network.png"><br>
+<img align="center" src="./readme_materials/network.png">
 Figure 1. Recurrent cascading CNN diagram.
 
 ## Training Objective
@@ -46,10 +46,10 @@ Test set: 300 randomly-selected samples removed from the training set
 The train and test error continues to decrease gradually after 24 hours, but I need my machine for other projects and so I cut the training short. Below are a sample of localizations from the test set.
 <hr>
 <img src="readme_materials/test_image_square.jpg">
-<br>Figure 2. Samples of localizations on test set.<br><hr>
+Figure 2. Samples of localizations on test set.<br><hr>
 Purely from observation, the model seems to be making quality predictions and is generalizing well. Surprisingly, the most error-prone areas appear to be the points surrounding the face rather than in densely-labeled regions like the eyes and lips, which are fit to highly expressive areas of the face where quality placement depends on coordinating multiple landmarks for a smooth edge. This contradicts my predictions, and might be because there are fewer points bounding the face, so they contribute less to the loss. This may be rectified with loss weighting, or just more training. The per-landmark loss is plotted in Figure 3, noted as the size of the dot. Indeed, the face-bounding points showed the highest errors.<br><hr>
 <img src="readme_materials/per_landmark_error.png">
-<br>Figure 3. Per-landmark loss.<br><hr>
+Figure 3. Per-landmark loss.<br><hr>
 
 Judging by the discrepancy in testing and training loss for landmark localization, shown in Figure 4, the model is overfitting to the training set. This could be due to things:
 
@@ -57,16 +57,16 @@ Judging by the discrepancy in testing and training loss for landmark localizatio
 2. I have not regularized my network.
 <hr>
 <img src='readme_materials/test_vs_train.png'>
-<br>Figure 4. Training vs. testing loss.<br>
+Figure 4. Training vs. testing loss.<br>
 <hr>
 
 Regularizing my network too much will decrease its expressive capacity, and since the model has not managed to solve the training set, I will opt for this approach for reducing test set error. Instead, I fill focus on online augmented sample generation to make a more robust and generalizable model.
 
 Lastly, I analyzed the effect of the recurrent mechanism in my localization network. Shown in Figure 5, the regression (MSE) losses decline drastically from the first to second applications, then remain static. The crossentropy heatmap loss, however, declined from cascade 1 to 2, then increased on the third pass. This suggests the heatmap network is overfitting and is not making meanful refinements after the second pass. In turn, this may be effecting the ability of the regression network to refine its prediction. To test this, I intend to make the heatmap objective more difficult by reducing the standard deviation of the heatmap gaussians from the literature suggestion 2.5, 1. Also, I will create a seperate feature stream for the regression modules to detangle the heatmap and regression objectives' gradients.
 <hr>
-<img src='readme_materials/cascades_mse.png'><br>Figure 5. Regression loss with each application of the recurrent module>
-<br><img src='readme_materials/ce_loss.png'><br>Figure 6. Crossentropy loss of the heatmap with each application of the recurrent module.<br>
-<hr>
+<img src='readme_materials/cascades_mse.png'>Figure 5. Regression loss with each application of the recurrent module>
+<img src='readme_materials/ce_loss.png'>Figure 6. Crossentropy loss of the heatmap with each application of the recurrent module.
+<br><hr>
  
 ## What's Next
 <hr>
