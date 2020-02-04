@@ -49,7 +49,7 @@ Purely from observation, the model seems to be making quality predictions and is
 <img src="readme_materials/per_landmark_error.png">
 Figure 3. Per-landmark loss.<br><hr>
 
-Judging by the discrepancy in testing and training loss for landmark localization, shown in Figure 4, the model is overfitting to the training set. This could be due to things:
+Judging by the discrepancy in testing and training loss for landmark localization, shown in Figure 4, the model is overfitting to the training set. This could be due to two things:
 
 1. I am training with positionally-static images. For high dimensional data, this causes a model to be prone to overfitting.
 2. I have not regularized my network.
